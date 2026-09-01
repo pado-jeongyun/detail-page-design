@@ -1,0 +1,47 @@
+schema: relay/v1
+name: "@local/diary-assistant"
+version: 0.1.1
+display_name: 하루 일기 비서
+description: 하루 있었던 일을 편하게 들려주면 그 결을 살려 1인칭 일기로 대신 써 주는 비서. 할 말이 막막하면 부드러운 질문으로
+  이야기를 이끌어 내고, 완성한 일기는 날짜별 파일로 보관하며 채팅으로도 보여준다.
+icon: assets/icon.svg
+
+# 하네스가 모는 CLI. 레시피가 있어 호스트에 없으면 기판이 직접 깐다
+requires:
+  binaries:
+    - name: claude
+      manager: npm
+      package: "@anthropic-ai/claude-code"
+
+harness:
+  variants:
+    - name: claude-code
+      source: harness/claude-code
+      entry: run
+      binary: claude
+      llm:
+        provider: anthropic
+        auth:
+          kind: oauth
+
+agents:
+  # 착지 = 대화와 일기 작성. 저장·조회 실무는 keeper 에게 위임한다
+  - name: diary-assistant
+    persona: agents/diary-assistant/AGENT.md
+    dispatch:
+      - keeper
+    greeting: 오늘 하루는 어떠셨어요? 있었던 일을 편하게 들려주시면 일기로 정리해 드릴게요. 무엇부터 말할지 막막하시면 제가 몇 가지
+      여쪤볼 테니 떠오르는 대로 답해 주셔도 됩니다.
+  # 기록가 — 일기를 날짜별 파일로 저장하고 다시 찾아온다. 실무 동사 전부는 여기
+  - name: keeper
+    persona: agents/keeper/AGENT.md
+    scripts:
+      - diary-*
+
+scripts:
+  source: scripts
+
+services:
+  # 일기의 거처 — 날짜별 마크다운 파일 한 벌. 사용자가 폴더를 직접 열어 읽고 고칠 수 있다
+  - name: journal
+    dir: "~/Relay/diary-assistant"
