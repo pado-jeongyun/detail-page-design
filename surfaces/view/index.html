@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>일기</title>
+<link rel="stylesheet" href="/assets/chat-app.css" />
+<style>
+  :root {
+    --paper: #faf6ee;
+    --card: #fffdf8;
+    --ink: #33302a;
+    --soft: #8a8378;
+    --line: #ece4d6;
+    --accent: #b6784a;
+    --accent-soft: #f2e6d8;
+    --shadow: 0 1px 2px rgba(60, 50, 35, .06), 0 6px 20px rgba(60, 50, 35, .05);
+    --rc-accent: #b6784a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #1c1a17;
+      --card: #262320;
+      --ink: #ece6db;
+      --soft: #9a9284;
+      --line: #37332d;
+      --accent: #d69a6c;
+      --accent-soft: #352c22;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 6px 20px rgba(0, 0, 0, .25);
+      --rc-accent: #d69a6c;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", "Segoe UI", sans-serif;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 40px 20px 120px; }
+  header.top { margin-bottom: 28px; }
+  header.top h1 {
+    font-size: 26px; font-weight: 700; margin: 0 0 4px;
+    letter-spacing: -.02em;
+  }
+  header.top .sub { color: var(--soft); font-size: 14px; }
+
+  .list { display: flex; flex-direction: column; gap: 12px; }
+  .entry {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 16px 18px;
+    cursor: pointer;
+    box-shadow: var(--shadow);
+    transition: transform .12s ease, border-color .12s ease;
+    text-align: left;
+    font: inherit; color: inherit; width: 100%;
+  }
+  .entry:hover { transform: translateY(-1px); border-color: var(--accent); }
+  .entry:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .entry .date {
+    display: flex; align-items: baseline; gap: 8px;
+    font-weight: 650; font-size: 15px; margin-bottom: 6px;
+  }
+  .entry .date .dow { color: var(--accent); font-size: 13px; font-weight: 600; }
+  .entry .date .rel { margin-left: auto; color: var(--soft); font-size: 12px; font-weight: 500; }
+  .entry .preview {
+    color: var(--soft); font-size: 14px;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+
+  .empty {
+    text-align: center; color: var(--soft);
+    padding: 64px 20px; border: 1px dashed var(--line); border-radius: 16px;
+    background: var(--card);
+  }
+  .empty .big { font-size: 34px; margin-bottom: 12px; }
+  .empty .hint { font-size: 14px; margin-top: 6px; }
+
+  /* reader modal */
+  .backdrop {
+    position: fixed; inset: 0; background: rgba(30, 25, 18, .42);
+    display: none; align-items: flex-start; justify-content: center;
+    padding: 40px 16px; overflow-y: auto; z-index: 40;
+    backdrop-filter: blur(2px);
+  }
+  .backdrop.on { display: flex; }
+  .reader {
+    background: var(--card); color: var(--ink);
+    max-width: 640px; width: 100%;
+    border-radius: 16px; border: 1px solid var(--line);
+    box-shadow: 0 12px 48px rgba(30, 25, 18, .28);
+    padding: 28px 30px 34px;
+    margin: auto 0;
+  }
+  .reader .rhead {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--line);
+  }
+  .reader .rhead .rdate { font-size: 18px; font-weight: 700; }
+  .reader .rhead .rdow { color: var(--accent); font-size: 13px; font-weight: 600; }
+  .reader .rhead .close {
+    margin-left: auto; border: none; background: var(--accent-soft); color: var(--accent);
+    width: 32px; height: 32px; border-radius: 9px; cursor: pointer; font-size: 17px; line-height: 1;
+  }
+  .reader .rhead .close:hover { filter: brightness(.97); }
+  .body {
+    font-size: 15.5px; line-height: 1.78; word-break: break-word;
+  }
+  .body h1, .body h2, .body h3 { line-height: 1.35; margin: 20px 0 8px; }
+  .body h1 { font-size: 20px; }
+  .body h2 { font-size: 18px; }
+  .body h3 { font-size: 16px; }
+  .body p { margin: 0 0 12px; }
+  .body ul { margin: 0 0 12px; padding-left: 20px; }
+  .body li { margin: 2px 0; }
+  .body strong { font-weight: 700; }
+  .body em { font-style: italic; }
+  .body hr { border: none; border-top: 1px solid var(--line); margin: 18px 0; }
+  .body blockquote {
+    margin: 0 0 12px; padding: 4px 14px; border-left: 3px solid var(--accent-soft);
+    color: var(--soft);
+  }
+  .rpath {
+    margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--line);
+    font-size: 12px; color: var(--soft); word-break: break-all;
+  }
+
+  /* toast */
+  .toast {
+    position: fixed; left: 50%; bottom: 92px; transform: translateX(-50%) translateY(10px);
+    background: var(--ink); color: var(--paper);
+    padding: 10px 16px; border-radius: 999px; font-size: 13px; font-weight: 500;
+    box-shadow: 0 6px 24px rgba(0,0,0,.24);
+    opacity: 0; pointer-events: none; transition: opacity .2s ease, transform .2s ease; z-index: 50;
+  }
+  .toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  .loading { text-align: center; color: var(--soft); padding: 48px; font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>일기</h1>
+    <div class="sub" id="sub">불러오는 중…</div>
+  </header>
+  <div id="list" class="list"></div>
+</div>
+
+<div class="backdrop" id="backdrop">
+  <article class="reader" id="reader">
+    <div class="rhead">
+      <span class="rdate" id="rdate"></span>
+      <span class="rdow" id="rdow"></span>
+      <button class="close" id="close" aria-label="닫기">×</button>
+    </div>
+    <div class="body" id="rbody"></div>
+    <div class="rpath" id="rpath"></div>
+  </article>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<link rel="stylesheet" href="/assets/chat-app.css" />
+<script type="module" src="/assets/chat-app.js"></script>
+<script>
+const ctx = window.__RELAY_CONTEXT || {};
+const base = ctx.base || "";
+
+async function verb(name, input = {}) {
+  const res = await fetch(`${base}/script/${name}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ input }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data?.error) throw new Error(data?.error ?? `${res.status}`);
+  return data.result;
+}
+
+const DOW = ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"];
+
+function parseDate(s) {
+  const [y, m, d] = s.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+function fmtDate(s) {
+  const dt = parseDate(s);
+  return `${dt.getFullYear()}년 ${dt.getMonth() + 1}월 ${dt.getDate()}일`;
+}
+function dowOf(s) { return DOW[parseDate(s).getDay()]; }
+function relOf(s) {
+  const dt = parseDate(s); const now = new Date();
+  const a = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+  const b = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const days = Math.round((b - a) / 86400000);
+  if (days === 0) return "오늘";
+  if (days === 1) return "어제";
+  if (days > 1 && days < 7) return `${days}일 전`;
+  return "";
+}
+
+function esc(s) {
+  return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+// 가벼운 마크다운 렌더 — 먼저 escape 해서 안전하게
+function renderMd(src) {
+  const lines = src.replace(/\r\n/g, "\n").split("\n");
+  const out = []; let para = []; let list = [];
+  const flushP = () => { if (para.length) { out.push(`<p>${inline(para.join(" "))}</p>`); para = []; } };
+  const flushL = () => { if (list.length) { out.push(`<ul>${list.map((t) => `<li>${inline(t)}</li>`).join("")}</ul>`); list = []; } };
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    let m;
+    if (!line.trim()) { flushP(); flushL(); continue; }
+    if ((m = /^(#{1,3})\s+(.*)$/.exec(line))) { flushP(); flushL(); out.push(`<h${m[1].length}>${inline(m[2])}</h${m[1].length}>`); continue; }
+    if (/^(-{3,}|\*{3,})$/.test(line.trim())) { flushP(); flushL(); out.push("<hr>"); continue; }
+    if ((m = /^\s*[-*+]\s+(.*)$/.exec(line))) { flushP(); list.push(m[1]); continue; }
+    if ((m = /^>\s?(.*)$/.exec(line))) { flushP(); flushL(); out.push(`<blockquote>${inline(m[1])}</blockquote>`); continue; }
+    para.push(line);
+  }
+  flushP(); flushL();
+  return out.join("\n");
+}
+function inline(s) {
+  return esc(s)
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/(^|[^*])\*([^*]+)\*/g, "$1<em>$2</em>");
+}
+
+const listEl = document.getElementById("list");
+const subEl = document.getElementById("sub");
+const backdrop = document.getElementById("backdrop");
+
+let loaded = false;
+
+async function load() {
+  if (!loaded) listEl.innerHTML = '<div class="loading">불러오는 중…</div>';
+  try {
+    const { entries, total } = await verb("diary-list", { limit: 365 });
+    loaded = true;
+    if (!total) {
+      subEl.textContent = "";
+      listEl.innerHTML = `<div class="empty"><div class="big">📖</div><div>아직 쓴 일기가 없어요</div><div class="hint">오늘 있었던 일을 오른쪽 대화창에 들려주세요. 일기로 정리해 드려요.</div></div>`;
+      return;
+    }
+    subEl.textContent = `모두 ${total}편`;
+    listEl.innerHTML = "";
+    for (const e of entries) {
+      const btn = document.createElement("button");
+      btn.className = "entry";
+      btn.type = "button";
+      const rel = relOf(e.date);
+      btn.innerHTML =
+        `<div class="date"><span>${fmtDate(e.date)}</span><span class="dow">${dowOf(e.date)}</span>` +
+        (rel ? `<span class="rel">${rel}</span>` : "") + `</div>` +
+        `<div class="preview">${esc(e.preview || "(내용 없음)")}</div>`;
+      btn.addEventListener("click", () => openEntry(e.date));
+      listEl.appendChild(btn);
+    }
+  } catch (err) {
+    listEl.innerHTML = `<div class="empty"><div>불러오지 못했어요</div><div class="hint">${esc(String(err.message || err))}</div></div>`;
+  }
+}
+
+async function openEntry(date) {
+  document.getElementById("rdate").textContent = fmtDate(date);
+  document.getElementById("rdow").textContent = dowOf(date);
+  document.getElementById("rbody").innerHTML = '<div class="loading">여는 중…</div>';
+  document.getElementById("rpath").textContent = "";
+  backdrop.classList.add("on");
+  setScene(`일기 읽는 중: ${date}`);
+  try {
+    const r = await verb("diary-read", { date });
+    if (!r.found) {
+      document.getElementById("rbody").innerHTML = "<p>이 날짜의 일기를 찾지 못했어요.</p>";
+      return;
+    }
+    document.getElementById("rbody").innerHTML = renderMd(r.body || "");
+    if (r.path) document.getElementById("rpath").textContent = r.path;
+  } catch (err) {
+    document.getElementById("rbody").innerHTML = `<p>${esc(String(err.message || err))}</p>`;
+  }
+}
+
+function closeReader() {
+  backdrop.classList.remove("on");
+  setScene("일기 목록을 보는 중");
+}
+document.getElementById("close").addEventListener("click", closeReader);
+backdrop.addEventListener("click", (e) => { if (e.target === backdrop) closeReader(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && backdrop.classList.contains("on")) closeReader(); });
+
+let toastTimer;
+function toast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("on");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("on"), 2600);
+}
+
+// 화면 → 위젯: 지금 무엇을 보는지
+function setScene(scene) {
+  window.dispatchEvent(new CustomEvent("relay:scene", { detail: { scene } }));
+}
+// 위젯 → 화면: 에이전트가 일기를 손보면 목록을 다시 읽는다
+window.addEventListener("relay:turn", (e) => {
+  if (e.detail?.phase !== "settled") return;
+  load().then(() => toast("일기가 새로 정리됐어요"));
+});
+
+load();
+setScene("일기 목록을 보는 중");
+</script>
+</body>
+</html>

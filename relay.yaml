@@ -1,6 +1,6 @@
 schema: relay/v1
 name: "@local/diary-assistant"
-version: 0.1.1
+version: 0.1.3
 display_name: 하루 일기 비서
 description: 하루 있었던 일을 편하게 들려주면 그 결을 살려 1인칭 일기로 대신 써 주는 비서. 할 말이 막막하면 부드러운 질문으로
   이야기를 이끌어 내고, 완성한 일기는 날짜별 파일로 보관하며 채팅으로도 보여준다.
@@ -40,6 +40,11 @@ agents:
 
 scripts:
   source: scripts
+
+# 일기 목록 화면 — 저장된 일기를 최근순으로 훑고 한 편씩 열어 읽는다. 대화창을 함께 띄운다
+surfaces:
+  view:
+    source: surfaces/view
 
 services:
   # 일기의 거처 — 날짜별 마크다운 파일 한 벌. 사용자가 폴더를 직접 열어 읽고 고칠 수 있다
