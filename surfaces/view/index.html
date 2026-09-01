@@ -40,12 +40,35 @@
     -webkit-font-smoothing: antialiased;
   }
   .wrap { max-width: 720px; margin: 0 auto; padding: 40px 20px 120px; }
-  header.top { margin-bottom: 28px; }
+  header.top { margin-bottom: 20px; }
   header.top h1 {
     font-size: 26px; font-weight: 700; margin: 0 0 4px;
     letter-spacing: -.02em;
   }
   header.top .sub { color: var(--soft); font-size: 14px; }
+
+  .search { margin-top: 16px; position: relative; }
+  .search .icon {
+    position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+    font-size: 14px; opacity: .55; pointer-events: none;
+  }
+  .search input {
+    width: 100%; font: inherit; font-size: 15px;
+    padding: 11px 40px 11px 40px;
+    border: 1px solid var(--line); border-radius: 12px;
+    background: var(--card); color: var(--ink);
+    box-shadow: var(--shadow);
+  }
+  .search input::placeholder { color: var(--soft); }
+  .search input:focus { outline: none; border-color: var(--accent); }
+  .search .clear {
+    position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+    border: none; background: var(--accent-soft); color: var(--accent);
+    width: 26px; height: 26px; border-radius: 8px; cursor: pointer; font-size: 15px; line-height: 1;
+    display: none;
+  }
+  .search .clear:hover { filter: brightness(.97); }
+  .search.filled .clear { display: block; }
 
   .list { display: flex; flex-direction: column; gap: 12px; }
   .entry {
@@ -67,9 +90,14 @@
   }
   .entry .date .dow { color: var(--accent); font-size: 13px; font-weight: 600; }
   .entry .date .rel { margin-left: auto; color: var(--soft); font-size: 12px; font-weight: 500; }
+  .entry .date .matches { margin-left: auto; color: var(--accent); font-size: 12px; font-weight: 600; }
   .entry .preview {
     color: var(--soft); font-size: 14px;
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .entry .preview mark {
+    background: var(--accent-soft); color: var(--accent);
+    border-radius: 3px; padding: 0 2px; font-weight: 650;
   }
 
   .empty {
@@ -124,6 +152,10 @@
     margin: 0 0 12px; padding: 4px 14px; border-left: 3px solid var(--accent-soft);
     color: var(--soft);
   }
+  .body mark {
+    background: var(--accent-soft); color: var(--accent);
+    border-radius: 3px; padding: 0 2px;
+  }
   .rpath {
     margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--line);
     font-size: 12px; color: var(--soft); word-break: break-all;
@@ -147,6 +179,11 @@
   <header class="top">
     <h1>일기</h1>
     <div class="sub" id="sub">불러오는 중…</div>
+    <div class="search" id="searchbox">
+      <span class="icon">🔍</span>
+      <input id="q" type="search" placeholder="일기 검색…" autocomplete="off" enterkeyhint="search" />
+      <button class="clear" id="clear" type="button" aria-label="지우기">×</button>
+    </div>
   </header>
   <div id="list" class="list"></div>
 </div>
@@ -207,6 +244,22 @@ function relOf(s) {
 function esc(s) {
   return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }
+// 맞은 대목 안의 query 를 mark 로 감싸 강조. 대소문자를 가리지 않고, 원문을
+// 먼저 쪼개고 조각마다 escape 해 안전하게 익는다.
+function highlight(text, q) {
+  if (!q) return esc(text);
+  const lower = text.toLowerCase();
+  const ql = q.toLowerCase();
+  let out = ""; let i = 0;
+  while (true) {
+    const idx = lower.indexOf(ql, i);
+    if (idx < 0) { out += esc(text.slice(i)); break; }
+    out += esc(text.slice(i, idx));
+    out += `<mark>${esc(text.slice(idx, idx + q.length))}</mark>`;
+    i = idx + q.length;
+  }
+  return out;
+}
 // 가벼운 마크다운 렌더 — 먼저 escape 해서 안전하게
 function renderMd(src) {
   const lines = src.replace(/\r\n/g, "\n").split("\n");
@@ -235,8 +288,12 @@ function inline(s) {
 const listEl = document.getElementById("list");
 const subEl = document.getElementById("sub");
 const backdrop = document.getElementById("backdrop");
+const qEl = document.getElementById("q");
+const searchboxEl = document.getElementById("searchbox");
 
 let loaded = false;
+let currentQuery = "";
+let searchTimer;
 
 async function load() {
   if (!loaded) listEl.innerHTML = '<div class="loading">불러오는 중…</div>';
@@ -267,6 +324,63 @@ async function load() {
   }
 }
 
+async function runSearch(q) {
+  listEl.innerHTML = '<div class="loading">찾는 중…</div>';
+  try {
+    const { hits, total } = await verb("diary-search", { query: q, limit: 365 });
+    if (currentQuery !== q) return;
+    if (!total) {
+      subEl.textContent = `'${q}' 검색 결과 없음`;
+      listEl.innerHTML = `<div class="empty"><div class="big">🔍</div><div>'${esc(q)}'이(가) 든 일기가 없어요</div><div class="hint">다른 낱말로 찾아보세요.</div></div>`;
+      setScene(`일기 검색 중: '${q}' — 결과 없음`);
+      return;
+    }
+    subEl.textContent = `'${q}' 검색 결과 ${total}편`;
+    listEl.innerHTML = "";
+    for (const h of hits) {
+      const btn = document.createElement("button");
+      btn.className = "entry";
+      btn.type = "button";
+      btn.innerHTML =
+        `<div class="date"><span>${fmtDate(h.date)}</span><span class="dow">${dowOf(h.date)}</span>` +
+        (h.matches > 1 ? `<span class="matches">${h.matches}곳</span>` : "") + `</div>` +
+        `<div class="preview">${highlight(h.snippet || "", q)}</div>`;
+      btn.addEventListener("click", () => openEntry(h.date));
+      listEl.appendChild(btn);
+    }
+    setScene(`일기 검색 중: '${q}' — ${total}편`);
+  } catch (err) {
+    listEl.innerHTML = `<div class="empty"><div>검색하지 못했어요</div><div class="hint">${esc(String(err.message || err))}</div></div>`;
+  }
+}
+
+// 목록이든 검색이든 지금 상태를 다시 그린다.
+function refresh() {
+  if (currentQuery) return runSearch(currentQuery);
+  return load();
+}
+
+qEl.addEventListener("input", () => {
+  const q = qEl.value.trim();
+  searchboxEl.classList.toggle("filled", qEl.value.length > 0);
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    if (q === currentQuery) return;
+    currentQuery = q;
+    refresh();
+  }, 220);
+});
+
+function clearSearch() {
+  qEl.value = "";
+  searchboxEl.classList.remove("filled");
+  clearTimeout(searchTimer);
+  if (currentQuery) { currentQuery = ""; load(); }
+  qEl.focus();
+}
+document.getElementById("clear").addEventListener("click", clearSearch);
+qEl.addEventListener("keydown", (e) => { if (e.key === "Escape" && qEl.value) { e.stopPropagation(); clearSearch(); } });
+
 async function openEntry(date) {
   document.getElementById("rdate").textContent = fmtDate(date);
   document.getElementById("rdow").textContent = dowOf(date);
@@ -280,16 +394,49 @@ async function openEntry(date) {
       document.getElementById("rbody").innerHTML = "<p>이 날짜의 일기를 찾지 못했어요.</p>";
       return;
     }
-    document.getElementById("rbody").innerHTML = renderMd(r.body || "");
+    let html = renderMd(r.body || "");
+    if (currentQuery) html = highlight_html(html, currentQuery);
+    document.getElementById("rbody").innerHTML = html;
     if (r.path) document.getElementById("rpath").textContent = r.path;
   } catch (err) {
     document.getElementById("rbody").innerHTML = `<p>${esc(String(err.message || err))}</p>`;
   }
 }
 
+// 이미 escape·태그가 섞인 HTML 에서 태그 밖 텍스트만 골라 query 를 mark 로 감싼다.
+function highlight_html(html, q) {
+  if (!q) return html;
+  const eq = esc(q).toLowerCase();
+  if (!eq) return html;
+  let out = ""; let i = 0;
+  while (i < html.length) {
+    if (html[i] === "<") {
+      const gt = html.indexOf(">", i);
+      const end = gt < 0 ? html.length : gt + 1;
+      out += html.slice(i, end);
+      i = end;
+      continue;
+    }
+    const next = html.indexOf("<", i);
+    const chunkEnd = next < 0 ? html.length : next;
+    const chunk = html.slice(i, chunkEnd);
+    const lower = chunk.toLowerCase();
+    let j = 0; let piece = "";
+    while (true) {
+      const at = lower.indexOf(eq, j);
+      if (at < 0) { piece += chunk.slice(j); break; }
+      piece += chunk.slice(j, at) + `<mark>${chunk.slice(at, at + eq.length)}</mark>`;
+      j = at + eq.length;
+    }
+    out += piece;
+    i = chunkEnd;
+  }
+  return out;
+}
+
 function closeReader() {
   backdrop.classList.remove("on");
-  setScene("일기 목록을 보는 중");
+  setScene(currentQuery ? `일기 검색 중: '${currentQuery}'` : "일기 목록을 보는 중");
 }
 document.getElementById("close").addEventListener("click", closeReader);
 backdrop.addEventListener("click", (e) => { if (e.target === backdrop) closeReader(); });
@@ -307,10 +454,10 @@ function toast(msg) {
 function setScene(scene) {
   window.dispatchEvent(new CustomEvent("relay:scene", { detail: { scene } }));
 }
-// 위젯 → 화면: 에이전트가 일기를 손보면 목록을 다시 읽는다
+// 위젯 → 화면: 에이전트가 일기를 손보면 지금 보던 것(목록·검색)을 다시 읽는다
 window.addEventListener("relay:turn", (e) => {
   if (e.detail?.phase !== "settled") return;
-  load().then(() => toast("일기가 새로 정리됐어요"));
+  refresh().then(() => toast("일기가 새로 정리됐어요"));
 });
 
 load();

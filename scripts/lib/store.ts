@@ -56,6 +56,17 @@ export function removeEntry(ctx: Ctx, date: string): boolean {
   return true;
 }
 
+// 저장된 일기의 날짜들을 최근 순으로. from/to(포함, YYYY-MM-DD)로 기간을 좁힌다.
+export function listDates(ctx: Ctx, opts?: { from?: string; to?: string }): string[] {
+  const dir = root(ctx);
+  return fs
+    .readdirSync(dir)
+    .filter((n) => n.endsWith(".md") && isValidDate(n.slice(0, -3)))
+    .map((n) => n.slice(0, -3))
+    .filter((d) => (!opts?.from || d >= opts.from) && (!opts?.to || d <= opts.to))
+    .sort((a, b) => b.localeCompare(a));
+}
+
 export interface EntrySummary {
   date: string;
   preview: string;
@@ -75,13 +86,7 @@ function makePreview(body: string, max = 100): string {
 
 // 저장된 일기 요약을 최근 날짜부터.
 export function listEntries(ctx: Ctx): EntrySummary[] {
-  const dir = root(ctx);
-  const dates = fs
-    .readdirSync(dir)
-    .filter((n) => n.endsWith(".md") && isValidDate(n.slice(0, -3)))
-    .map((n) => n.slice(0, -3))
-    .sort((a, b) => b.localeCompare(a));
-  return dates.map((date) => {
+  return listDates(ctx).map((date) => {
     const body = readEntry(ctx, date) ?? "";
     return {
       date,
@@ -90,4 +95,51 @@ export function listEntries(ctx: Ctx): EntrySummary[] {
       path: entryPath(ctx, date),
     };
   });
+}
+
+export interface SearchHit {
+  date: string;
+  snippet: string;
+  matches: number;
+  bytes: number;
+  path: string;
+}
+
+// 맞은 대목 앞뒤로 radius 글자만큼을 떼어 한 줄로. 맞은 낱말은 그대로 남겨 화면이
+// 강조할 수 있게 한다.
+function makeSnippet(body: string, idx: number, len: number, radius = 60): string {
+  const start = Math.max(0, idx - radius);
+  const end = Math.min(body.length, idx + len + radius);
+  let seg = body.slice(start, end).replace(/\s+/g, " ").trim();
+  if (start > 0) seg = "…" + seg;
+  if (end < body.length) seg = seg + "…";
+  return seg;
+}
+
+// 낱말·문구로 일기 본문을 뒤진다. 대소문자를 가리지 않고 그대로 든 대목을 찾는다.
+// 맞은 일기를 최근 날짜부터, 첫 대목의 snippet 과 맞은 횟수와 함께 준다.
+export function searchEntries(
+  ctx: Ctx,
+  query: string,
+  opts?: { from?: string; to?: string },
+): SearchHit[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  const hits: SearchHit[] = [];
+  for (const date of listDates(ctx, opts)) {
+    const body = readEntry(ctx, date) ?? "";
+    const hay = body.toLowerCase();
+    const first = hay.indexOf(q);
+    if (first < 0) continue;
+    let matches = 0;
+    for (let at = first; at >= 0; at = hay.indexOf(q, at + q.length)) matches++;
+    hits.push({
+      date,
+      snippet: makeSnippet(body, first, q.length),
+      matches,
+      bytes: Buffer.byteLength(body, "utf8"),
+      path: entryPath(ctx, date),
+    });
+  }
+  return hits;
 }
