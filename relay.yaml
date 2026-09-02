@@ -1,6 +1,6 @@
 schema: relay/v1
 name: "@local/diary-assistant"
-version: 0.1.4
+version: 0.1.5
 display_name: 하루 일기 비서
 description: 하루 있었던 일을 편하게 들려주면 그 결을 살려 1인칭 일기로 대신 써 주는 비서. 할 말이 막막하면 부드러운 질문으로
   이야기를 이끌어 내고, 완성한 일기는 날짜별 파일로 보관하며 채팅으로도 보여준다.
